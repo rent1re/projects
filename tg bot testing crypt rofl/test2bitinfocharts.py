@@ -1,51 +1,54 @@
 import requests
-from bs4 import BeautifulSoup
-import re
 
-def get_bitinfocharts_price():
-    url = "https://bitinfocharts.com/ru/crypto-kurs/"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    # Найдем таблицу с курсами
-    table = soup.find("table", class_="table")
-    if not table:
-        raise ValueError("Таблица с курсами не найдена!")
-
-    rows = table.find_all("tr")[1:]  # Пропускаем заголовок
-    prices = {}
-
-    # Ищем нужные данные (не ссылки, а прямые цены)
-    for row in rows:
-        cols = row.find_all("td")
-        if len(cols) > 2:
-            coin_name = cols[0].text.strip()  # Название монеты
-            price_text = cols[1].text.strip()
-
-            # Печатаем отладочную информацию
-            print(f"Монета: {coin_name}, Цена: {price_text}")
-
-            # Очищаем строку от ненужных символов и процентов
-            price_cleaned = re.sub(r"[^\d.,]", "", price_text)  # Убираем все, кроме цифр и запятой
-            if price_cleaned:
-                try:
-                    # Преобразуем цену в число
-                    price = float(price_cleaned.replace(",", "."))
-                    prices[coin_name] = price
-                except ValueError:
-                    print(f"Не удалось преобразовать цену: {price_cleaned}")
-                    continue  # Если не удалось преобразовать в число, пропускаем
-
-    print("Парсинг завершён!")
-    if not prices:
-        print("Не удалось получить цены!")
+# Функция для получения цены с Binance (используя API)
+def get_binance_price(symbol="BTCUSDT"):
+    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+    response = requests.get(url)
+    data = response.json()
+    if 'price' in data:
+        return float(data["price"])
     else:
-        print("Монеты и их цены:")
-        for coin, price in prices.items():
-            print(f"{coin}: {price}")
+        raise ValueError(f"Ошибка получения данных с Binance: {data}")
 
-    return prices
+# Функция для получения цены с CoinGecko (используя API)
+def get_coingecko_price(symbol="bitcoin"):
+    url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd"
+    response = requests.get(url)
+    data = response.json()
+    if symbol in data:
+        return data[symbol]['usd']
+    else:
+        raise ValueError(f"Ошибка получения данных с CoinGecko для {symbol}: {data}")
 
-# Пример вызова
-prices = get_bitinfocharts_price()
+# Функция для вычисления процентного расхождения
+def calculate_percentage_difference(price1, price2):
+    return abs(price1 - price2) / price1 * 100
+
+# Список популярных криптовалют и их тикеров для Binance
+coins = {
+    "bitcoin": "BTCUSDT",
+    "ethereum": "ETHUSDT",
+    "binancecoin": "BNBUSDT",
+    "cardano": "ADAUSDT",
+    "ripple": "XRPUSDT"
+}
+
+# Обрабатываем каждую криптовалюту
+for coin, binance_ticker in coins.items():
+    try:
+        # Получаем цену с Binance
+        binance_price = get_binance_price(binance_ticker)
+        print(f"Цена с Binance для {coin}: {binance_price}")
+
+        # Получаем цену с CoinGecko
+        coingecko_price = get_coingecko_price(coin)
+        print(f"Цена с CoinGecko для {coin}: {coingecko_price}")
+
+        # Вычисляем процентное расхождение
+        percent_diff = calculate_percentage_difference(binance_price, coingecko_price)
+        print(f"Процентное расхождение между Binance и CoinGecko для {coin}: {percent_diff:.2f}%")
+        print("-" * 50)
+
+    except Exception as e:
+        print(f"Ошибка получения данных для {coin}: {e}")
+        print("-" * 50)
