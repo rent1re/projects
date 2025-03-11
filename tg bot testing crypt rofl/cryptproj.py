@@ -1,5 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
+import re
+import time
 
 # 1️⃣ Binance API
 def get_binance_price(symbol="BTCUSDT"):
@@ -9,8 +11,6 @@ def get_binance_price(symbol="BTCUSDT"):
     return float(data["price"])
 
 # 2️⃣ BitInfoCharts (Парсинг HTML)
-import re
-
 def get_bitinfocharts_price():
     url = "https://bitinfocharts.com/ru/crypto-kurs/"
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -38,11 +38,10 @@ def get_bitinfocharts_price():
     print("Спарсенные монеты:", prices.keys())  # Вывод списка монет
     return prices
 
-
-
-# 3️⃣ Сравнение данных
+# 3️⃣ Сравнение данных с проверкой расхождения
 def compare_prices(symbol="BTC"):
     binance_price = get_binance_price(symbol + "USDT")
+    time.sleep(1)  # Задержка между запросами
     bitinfo_prices = get_bitinfocharts_price()
 
     print(f"Ищем {symbol} среди: {bitinfo_prices.keys()}")  # Отладка
@@ -56,9 +55,18 @@ def compare_prices(symbol="BTC"):
         bitinfo_price = bitinfo_prices[bitinfo_key]
         print(f"Цена с Binance: {binance_price}, Цена с BitInfoCharts: {bitinfo_price}")  # Отладка
         
-        # Не умножаем цену с BitInfoCharts на курс Binance
+        # Вычисление разницы в процентах
         diff = abs(binance_price - bitinfo_price)
         percent_diff = (diff / binance_price) * 100
+
+        # Если процентное расхождение больше 10%, выводим предупреждение и игнорируем
+        if percent_diff > 10:
+            return {
+                "Binance": binance_price,
+                "BitInfoCharts": bitinfo_price,
+                "Разница": diff,
+                "Процентное расхождение": "Слишком большое расхождение, возможно устаревшие данные"
+            }
 
         return {
             "Binance": binance_price,
