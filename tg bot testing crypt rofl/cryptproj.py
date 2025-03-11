@@ -8,9 +8,6 @@ def get_binance_price(symbol="BTCUSDT"):
     response = requests.get(url)
     data = response.json()
 
-    print(f"Запрос к Binance: {url}")
-    print(f"Ответ от Binance: {data}")
-
     if 'price' in data:
         return float(data["price"])
     else:
@@ -19,11 +16,8 @@ def get_binance_price(symbol="BTCUSDT"):
 # 2️⃣ Парсинг с CoinGecko
 def get_coingecko_price(symbol="bitcoin"):
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd"
-    print(f"Запрос к CoinGecko: {url}")
     response = requests.get(url)
     data = response.json()
-
-    print(f"Ответ от CoinGecko: {data}")
 
     if symbol in data:
         return data[symbol]["usd"]
@@ -80,7 +74,8 @@ def compare_prices(symbol="bitcoin"):
         print(f"Цена с Binance для {symbol}: {binance_price}")
         print(f"Цена с CoinGecko для {symbol}: {coingecko_price}")
 
-        bitinfo_key = next((key for key in bitinfo_prices if key.startswith(symbol.upper() + " ")), None)
+        # Улучшенный поиск для BitInfoCharts
+        bitinfo_key = next((key for key in bitinfo_prices if "BTC" in key or "Bitcoin" in key), None)
         if bitinfo_key:
             bitinfo_price = bitinfo_prices[bitinfo_key]
             print(f"Цена с BitInfoCharts для {symbol}: {bitinfo_price}")
