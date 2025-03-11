@@ -1,57 +1,104 @@
 import requests
 from bs4 import BeautifulSoup
+import re
 
-# 1️⃣ Получаем цену с CoinGecko
-def get_coingecko_price(symbol="bitcoin"):
-    url = f"https://www.coingecko.com/ru/криптовалюты/{symbol}"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
-    
-    # Ищем цену на странице
-    price_tag = soup.find("span", class_="no-wrap")
-    if price_tag:
-        price = price_tag.text.strip().replace("₽", "").replace(",", "")
-        return float(price)
-    else:
-        raise ValueError("Не удалось найти цену на CoinGecko!")
-
-# 2️⃣ Binance API (с отладкой)
-# 1️⃣ Binance API (с отладкой)
+# 1️⃣ Binance API
 def get_binance_price(symbol="BTCUSDT"):
-    symbol = symbol.upper()  # Преобразуем символ в верхний регистр
-    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}USDT"
+    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
     response = requests.get(url)
     data = response.json()
 
-    # Выводим отладочную информацию
-    print("Ответ от Binance:", data)
+    print(f"Запрос к Binance: {url}")
+    print(f"Ответ от Binance: {data}")
 
-    if "price" in data:
+    if 'price' in data:
         return float(data["price"])
     else:
         raise ValueError(f"Ошибка получения данных с Binance: {data}")
 
-# 3️⃣ Сравнение цен
-def compare_prices(symbol="BTC"):
-    binance_price = get_binance_price(symbol + "USDT")
+# 2️⃣ Парсинг с CoinGecko
+def get_coingecko_price(symbol="bitcoin"):
+    url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd"
+    print(f"Запрос к CoinGecko: {url}")
+    response = requests.get(url)
+    data = response.json()
+
+    print(f"Ответ от CoinGecko: {data}")
+
+    if symbol in data:
+        return data[symbol]["usd"]
+    else:
+        raise ValueError(f"Ошибка получения данных с CoinGecko для {symbol}: {data}")
+
+# 3️⃣ Парсинг с BitInfoCharts (HTML)
+def get_bitinfocharts_price():
+    url = "https://bitinfocharts.com/ru/crypto-kurs/"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    table = soup.find("table", class_="table")
+    if not table:
+        raise ValueError("Таблица с курсами не найдена!")
+
+    rows = table.find_all("tr")[1:]  # Пропускаем заголовок
+    prices = {}
+
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) > 2:
+            coin_name = cols[0].text.strip()  # Название монеты
+            price_match = re.search(r"\d+\.\d+", cols[1].text)
+            if price_match:
+                price = float(price_match.group())  # Берём только найденное число
+                prices[coin_name] = price
+
+    return prices
+
+# 4️⃣ Сравнение цен
+def compare_prices(symbol="bitcoin"):
     try:
-        coingecko_price = get_coingecko_price(symbol.lower())
-    except Exception as e:
-        return str(e)
+        binance_symbol = "BTCUSDT" if symbol.lower() == "bitcoin" else symbol.upper() + "USDT"
+        binance_price = get_binance_price(binance_symbol)
+    except ValueError as e:
+        print(f"Ошибка получения данных с Binance: {e}")
+        binance_price = None
 
-    print(f"Ищем {symbol} среди: CoinGecko и Binance")
-    
-    print(f"Цена с Binance: {binance_price}, Цена с CoinGecko: {coingecko_price}")
-    
-    diff = abs(binance_price - coingecko_price)
-    percent_diff = (diff / binance_price) * 100
+    try:
+        coingecko_price = get_coingecko_price(symbol.lower())  # Преобразуем в нижний регистр для CoinGecko
+    except ValueError as e:
+        print(f"Ошибка получения данных с CoinGecko: {e}")
+        coingecko_price = None
 
-    return {
-        "Binance": binance_price,
-        "CoinGecko": coingecko_price,
-        "Разница": diff,
-        "Процентное расхождение": f"{percent_diff:.2f}%"
-    }
+    try:
+        bitinfo_prices = get_bitinfocharts_price()
+    except ValueError as e:
+        print(f"Ошибка получения данных с BitInfoCharts: {e}")
+        bitinfo_prices = {}
 
-# 4️⃣ Тестируем
-print(compare_prices("BTC"))  # Для Bitcoin
+    if binance_price and coingecko_price and bitinfo_prices:
+        print(f"Цена с Binance для {symbol}: {binance_price}")
+        print(f"Цена с CoinGecko для {symbol}: {coingecko_price}")
+
+        bitinfo_key = next((key for key in bitinfo_prices if key.startswith(symbol.upper() + " ")), None)
+        if bitinfo_key:
+            bitinfo_price = bitinfo_prices[bitinfo_key]
+            print(f"Цена с BitInfoCharts для {symbol}: {bitinfo_price}")
+
+            diff = abs(binance_price - bitinfo_price)
+            percent_diff = (diff / binance_price) * 100
+
+            return {
+                "Binance": binance_price,
+                "CoinGecko": coingecko_price,
+                "BitInfoCharts": bitinfo_price,
+                "Разница": diff,
+                "Процентное расхождение": f"{percent_diff:.2f}%"
+            }
+        else:
+            return f"Монета {symbol} не найдена на BitInfoCharts!"
+    else:
+        return "Ошибка получения данных с одного из источников."
+
+# 5️⃣ Тестируем с BTC
+print(compare_prices("bitcoin"))
